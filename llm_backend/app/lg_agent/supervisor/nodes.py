@@ -47,11 +47,17 @@ def make_classify_node(llm: BaseChatModel):
             )
             if history_lines:
                 context_parts.append(f"[近期对话]\n{history_lines}")
-        # 按 worker 分组展示 slots，避免跨 worker 污染
+        # 当前话题 slots（按 worker 分组）
         for worker_type, wslots in ctx["worker_slots"].items():
             if wslots:
-                label = "用户偏好" if worker_type == "_profile" else f"{worker_type}记录"
+                label = "用户偏好" if worker_type == "_profile" else f"当前话题:{worker_type}记录"
                 context_parts.append(f"[{label}] {json.dumps(wslots, ensure_ascii=False)}")
+        # 上个话题 slots（仅用于指代消解，不参与 topic_changed 判断）
+        for worker_type, wslots in ctx.get("prev_worker_slots", {}).items():
+            if wslots and worker_type != "_profile":
+                context_parts.append(
+                    f"[上个话题:{worker_type}记录] {json.dumps(wslots, ensure_ascii=False)}"
+                )
         if ctx["profile"]:
             context_parts.append(f"[用户画像] {json.dumps(ctx['profile'], ensure_ascii=False)}")
 
@@ -65,9 +71,18 @@ def make_classify_node(llm: BaseChatModel):
             {"query": enriched_query}
         )
 
+        # 话题切换：关旧段、开新段，新段无旧 slots，防止跨话题污染
+        if result.topic_changed and segment_id and thread_id:
+            await SegmentManager.end_segment(segment_id)
+            segment_id = await SegmentManager.get_or_open_segment(thread_id)
+            _log.info(f"Topic changed → closed old segment, opened new segment {segment_id}")
+
         # 使用 rewritten_query（若非空）作为 Worker description；回退到原始消息
         description = result.rewritten_query.strip() if result.rewritten_query.strip() else raw_query
-        _log.info(f"Classify: intent={result.intent} out_of_scope={result.out_of_scope} rewritten={description[:60]!r}")
+        _log.info(
+            f"Classify: intent={result.intent} out_of_scope={result.out_of_scope} "
+            f"topic_changed={result.topic_changed} rewritten={description[:60]!r}"
+        )
 
         if result.out_of_scope:
             return {

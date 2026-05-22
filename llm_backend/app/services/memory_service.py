@@ -126,10 +126,11 @@ class MemoryService:
         """classify_intent 专用：一次调用取齐所有上下文。
 
         Returns:
-            recent:       最近 6 条消息列表
-            summary:      对话摘要（超过滑窗的老消息压缩）
-            profile:      用户画像 dict
-            worker_slots: {worker_type: slots}，当前段各 worker 隔离的 slots
+            recent:            最近 6 条消息列表
+            summary:           对话摘要（超过滑窗的老消息压缩）
+            profile:           用户画像 dict
+            worker_slots:      {worker_type: slots}，当前段各 worker 隔离的 slots
+            prev_worker_slots: {worker_type: slots}，上一个已关闭段的 slots，仅用于跨段指代消解
         """
         recent = await MemoryService.get_recent_messages(thread_id, limit=6)
         summary = await MemoryService.get_summary(thread_id)
@@ -137,14 +138,49 @@ class MemoryService:
         if user_id:
             profile = await MemoryService.get_user_profile(int(user_id))
         worker_slots: Dict[str, Dict] = {}
+        prev_worker_slots: Dict[str, Dict] = {}
         if segment_id:
             worker_slots = await MemoryService.get_all_segment_slots(segment_id)
+            prev_worker_slots = await MemoryService._get_prev_segment_slots(thread_id, segment_id)
         return {
             "recent": recent,
             "summary": summary,
             "profile": profile,
             "worker_slots": worker_slots,
+            "prev_worker_slots": prev_worker_slots,
         }
+
+    @staticmethod
+    async def _get_prev_segment_slots(
+        thread_id: str, current_segment_id: int
+    ) -> Dict[str, Dict]:
+        """读取最近一个已关闭段的所有 worker slots，供跨段指代消解使用。
+        仅读取，不影响写入隔离逻辑。
+        """
+        from app.models.topic_segment import TopicSegment
+        from app.models.dialogue_state import DialogueState
+        async with AsyncSessionLocal() as db:
+            conv = (await db.execute(
+                select(Conversation).where(Conversation.thread_id == thread_id)
+            )).scalar_one_or_none()
+            if not conv:
+                return {}
+            prev_seg = (await db.execute(
+                select(TopicSegment)
+                .where(
+                    TopicSegment.conversation_id == conv.id,
+                    TopicSegment.ended_at.is_not(None),
+                    TopicSegment.id != current_segment_id,
+                )
+                .order_by(TopicSegment.ended_at.desc())
+                .limit(1)
+            )).scalar_one_or_none()
+            if not prev_seg:
+                return {}
+            rows = (await db.execute(
+                select(DialogueState).where(DialogueState.segment_id == prev_seg.id)
+            )).scalars().all()
+            return {row.worker_type: dict(row.slots or {}) for row in rows}
 
     # ── 长期:用户画像 + 对话摘要 ──
 

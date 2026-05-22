@@ -37,8 +37,16 @@ CLASSIFY_SYSTEM_PROMPT = """你是灵犀智购的智能路由 Supervisor。收�
 
 如果 multi，列出 workers[] 列表。
 
-输出 JSON（必须包含 rewritten_query）:
-{{"logic": "分类理由", "out_of_scope": false, "intent": "product_qa", "workers": ["product_qa"], "rewritten_query": "改写后的完整问题"}}
+## 4. 话题切换检测
+如果当前消息与 [当前话题] slots 所代表的业务域明显不同，置 `topic_changed=true`：
+- [当前话题] 是 product_qa slots，而用户现在问订单/物流 → true
+- [当前话题] 是 order_qa slots，而用户现在问产品推荐 → true
+- 同域内追问（换型号、继续问同产品、同订单追问）→ false
+- 无 [当前话题] 记录（首轮或空 slots）→ false
+注意：[上个话题] 仅用于指代消解（把"那款"还原为具体名称），不参与 topic_changed 判断。
+
+输出 JSON（必须包含 rewritten_query 和 topic_changed）:
+{{"logic": "分类理由", "out_of_scope": false, "intent": "product_qa", "workers": ["product_qa"], "rewritten_query": "改写后的完整问题", "topic_changed": false}}
 """
 
 from pydantic import BaseModel, Field
@@ -51,3 +59,4 @@ class ClassifyOutput(BaseModel):
     intent: str = Field(description="general_chat | product_qa | order_qa | after_sales | multi")
     workers: List[str] = Field(default_factory=list)
     rewritten_query: str = Field(default="", description="指代消解后的完整问题，Worker 用这个做子任务描述")
+    topic_changed: bool = Field(default=False, description="当前问题与已有 [当前话题] slots 代表的业务域明显不同时为 True")
