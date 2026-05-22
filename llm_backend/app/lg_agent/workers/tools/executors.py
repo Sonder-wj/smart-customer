@@ -66,9 +66,9 @@ class RecommendExecutor:
                 scenario=args.get("scenario", ""),
                 budget_min=budget_min,
                 budget_max=budget_max,
-                preferences=args.get("preferences", []),
-                exclude_names=set(args.get("exclude", [])),
-                top_k=args.get("top_k", 3),
+                preferences=args.get("preferences") or [],   # LLM 可能显式传 null
+                exclude_names=set(args.get("exclude") or []), # set(None) 会抛 NoneType 不可迭代
+                top_k=args.get("top_k") or 3,
             )
             if not records:
                 return ToolResult(
