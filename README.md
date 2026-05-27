@@ -8,7 +8,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-> **当前分支**: `feat/multi-agent`(已重构为多 Agent 架构,旧版单图设计已废弃)
+> **当前分支**: `feat/multi-agent`
 
 ---
 
