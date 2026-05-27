@@ -297,10 +297,6 @@ def build_supervisor_graph():
     return graph.compile(checkpointer=SqliteSaver(...))
 ```
 
-**怎么向面试官讲这段?**
-
-> "Supervisor 用 LangGraph `StateGraph` 构建,核心是 `Send` API 实现并行派发——`decompose_tasks` 返回 `Send` 对象列表,LangGraph runtime 会自动并发跑所有目标节点。每个 Worker 是 `create_react_agent` 包一层薄壳的子图,壳负责注入身份、限制工具集、解析工具结果里的控制信号(clarify/escalate/reroute)。`merge_results` 有 fast-path 优化:单 Worker 且 confidence ≥ 0.5 直接透传,跳过二次 LLM 合成,省 token 也降延迟。"
-
 ### 工具注册表
 
 ```python
